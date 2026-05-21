@@ -1,4 +1,4 @@
-#!/usr/bin/env zsh
+#!/usr/bin/env bash
 # image_capture.sh — Launch the ROS2 image capture viewer
 # Usage: ./image_capture.sh [--help]
 # Press '1' in the display window to capture RGB + Depth images.
@@ -15,10 +15,27 @@ WINDOW_HEIGHT="360"
 QOS_RELIABILITY="best_effort" # "reliable" or "best_effort"
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-SCRIPT_DIR="${0:A:h}"         # directory of this shell script (zsh)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/image_capture.py"
 VENV_DIR="${SCRIPT_DIR}/.venv"
-ROS2_SETUP="/opt/ros/humble/setup.sh"
+# Auto-detect ROS2 distro and shell-appropriate setup file
+ROS2_SETUP=""
+CURRENT_SHELL="$(basename "${SHELL:-/bin/bash}")"
+if [[ "${CURRENT_SHELL}" == "zsh" ]]; then
+  SETUP_FILE="setup.zsh"
+else
+  SETUP_FILE="setup.bash"
+fi
+for distro in rolling jazzy iron humble galactic foxy; do
+  if [[ -f "/opt/ros/${distro}/${SETUP_FILE}" ]]; then
+    ROS2_SETUP="/opt/ros/${distro}/${SETUP_FILE}"
+    break
+  fi
+done
+if [[ -z "${ROS2_SETUP}" ]]; then
+  echo "[ERROR] No ROS2 installation found in /opt/ros/"
+  exit 1
+fi
 
 # ─── Help ─────────────────────────────────────────────────────────────────────
 if [[ "${1}" == "--help" || "${1}" == "-h" ]]; then
