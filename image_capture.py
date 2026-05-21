@@ -52,8 +52,16 @@ class ImageCaptureNode:
         self._capture_requested = False
         self._capture_count = 0
 
-        os.makedirs(os.path.join(args.output_dir, "rgb"), exist_ok=True)
-        os.makedirs(os.path.join(args.output_dir, "depth"), exist_ok=True)
+        # Resolve to absolute path so logs are unambiguous regardless of cwd
+        args.output_dir = os.path.abspath(args.output_dir)
+        rgb_dir = os.path.join(args.output_dir, "rgb")
+        depth_dir = os.path.join(args.output_dir, "depth")
+        os.makedirs(rgb_dir, exist_ok=True)
+        os.makedirs(depth_dir, exist_ok=True)
+        print(f"[DEBUG] cwd            = {os.getcwd()}")
+        print(f"[DEBUG] output_dir abs = {args.output_dir}")
+        print(f"[DEBUG] rgb_dir   abs  = {rgb_dir}  exists={os.path.isdir(rgb_dir)}  writable={os.access(rgb_dir, os.W_OK)}")
+        print(f"[DEBUG] depth_dir abs  = {depth_dir}  exists={os.path.isdir(depth_dir)}  writable={os.access(depth_dir, os.W_OK)}")
 
         reliability = (ReliabilityPolicy.BEST_EFFORT
                        if args.qos_reliability == "best_effort"
@@ -148,9 +156,24 @@ class ImageCaptureNode:
         rgb_path   = os.path.join(self._args.output_dir, "rgb",   filename)
         depth_path = os.path.join(self._args.output_dir, "depth", filename)
 
-        cv2.imwrite(rgb_path, rgb)
+        log = self._node.get_logger()
+        log.info(f"[Capture #{idx}] rgb   shape={rgb.shape} dtype={rgb.dtype}  -> {rgb_path}")
+        log.info(f"[Capture #{idx}] depth shape={depth.shape} dtype={depth.dtype}")
 
-        # Always save depth as uint16 PNG with unit = mm
+        # ── RGB ───────────────────────────────────────────────────────────────
+        try:
+            ok_rgb = cv2.imwrite(rgb_path, rgb)
+        except cv2.error as e:
+            ok_rgb = False
+            log.error(f"[Capture #{idx}] cv2.imwrite RGB threw: {e}")
+        if ok_rgb and os.path.isfile(rgb_path):
+            sz = os.path.getsize(rgb_path)
+            log.info(f"[Capture #{idx}] RGB   ok  ({sz} bytes)")
+        else:
+            log.error(f"[Capture #{idx}] RGB   FAILED  (imwrite={ok_rgb}, exists={os.path.isfile(rgb_path)}, "
+                      f"dir_writable={os.access(os.path.dirname(rgb_path), os.W_OK)})")
+
+        # ── Depth: always save as uint16 PNG, unit = mm ──────────────────────
         if depth.dtype == np.float32:
             # 32FC1: values in metres → convert to mm
             depth_mm = (np.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0) * 1000.0)
@@ -161,11 +184,23 @@ class ImageCaptureNode:
             depth_mm = depth.astype(np.float32)
 
         depth_uint16 = depth_mm.clip(0, 65535).astype(np.uint16)
-        cv2.imwrite(depth_path, depth_uint16)
+        # cv2.imwrite refuses 3-channel uint16; squeeze any singleton channel dim
+        if depth_uint16.ndim == 3 and depth_uint16.shape[2] == 1:
+            depth_uint16 = depth_uint16[:, :, 0]
+        log.info(f"[Capture #{idx}] depth_uint16 shape={depth_uint16.shape} dtype={depth_uint16.dtype} "
+                 f"min={int(depth_uint16.min())} max={int(depth_uint16.max())}")
 
-        self._node.get_logger().info(
-            f"[Capture #{idx}] Saved:\n  RGB:   {rgb_path}\n  Depth: {depth_path}"
-        )
+        try:
+            ok_depth = cv2.imwrite(depth_path, depth_uint16)
+        except cv2.error as e:
+            ok_depth = False
+            log.error(f"[Capture #{idx}] cv2.imwrite Depth threw: {e}")
+        if ok_depth and os.path.isfile(depth_path):
+            sz = os.path.getsize(depth_path)
+            log.info(f"[Capture #{idx}] Depth ok  ({sz} bytes)")
+        else:
+            log.error(f"[Capture #{idx}] Depth FAILED  (imwrite={ok_depth}, exists={os.path.isfile(depth_path)}, "
+                      f"dir_writable={os.access(os.path.dirname(depth_path), os.W_OK)})")
 
     def _spin_thread(self):
         import rclpy
