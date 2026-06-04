@@ -1,3 +1,5 @@
 .venv/
 captured_images/
+
+graphify-out/
 **/__pycache__/**

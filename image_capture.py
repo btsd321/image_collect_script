@@ -92,14 +92,18 @@ class ImageCaptureNode:
         self._node.get_logger().info(f"Save directory:    {args.output_dir}")
         self._node.get_logger().info("Press '1' in the display window to capture images. Press 'q' or ESC to quit.")
 
-    def _ros_image_to_cv2(self, msg):
-        """Convert sensor_msgs/Image to OpenCV mat without cv_bridge dependency."""
+    def _ros_image_to_cv2(self, msg, expect: str = "any"):
+        """Convert sensor_msgs/Image to OpenCV mat without cv_bridge dependency.
+
+        expect: 'rgb' → return BGR uint8; 'depth' → return raw passthrough (preserve dtype/channels);
+                'any' → passthrough.
+        """
         if self._bridge is not None:
             try:
-                encoding = msg.encoding
-                if encoding in ("32FC1", "16UC1"):
-                    return self._bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-                return self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                if expect == "rgb":
+                    return self._bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+                # depth / any: never convert color space, preserve original dtype + channels
+                return self._bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
             except Exception:
                 pass
 
@@ -125,16 +129,30 @@ class ImageCaptureNode:
 
     def _rgb_callback(self, msg):
         try:
-            img = self._ros_image_to_cv2(msg)
+            img = self._ros_image_to_cv2(msg, expect="rgb")
             with self._lock:
+                if self._rgb_frame is None:
+                    self._node.get_logger().info(
+                        f"First RGB frame: encoding={msg.encoding}, shape={img.shape}, dtype={img.dtype}")
                 self._rgb_frame = img.copy()
         except Exception as e:
             self._node.get_logger().warn(f"RGB conversion error: {e}")
 
     def _depth_callback(self, msg):
         try:
-            img = self._ros_image_to_cv2(msg)
+            img = self._ros_image_to_cv2(msg, expect="depth")
+            # 深度必须是单通道；多通道说明 encoding 走错（XYZ 点云图、RGB 错配等）
+            if img.ndim == 3 and img.shape[2] != 1:
+                self._node.get_logger().warn(
+                    f"Depth has {img.shape[2]} channels (encoding={msg.encoding}). "
+                    f"Expected 1-channel 16UC1(mm) or 32FC1(m). Using channel 0 only — "
+                    f"verify the topic outputs raw depth, not point cloud / RGB.")
+                img = img[:, :, 0]
             with self._lock:
+                if self._depth_frame is None:
+                    self._node.get_logger().info(
+                        f"First depth frame: encoding={msg.encoding}, shape={img.shape}, dtype={img.dtype}, "
+                        f"min={float(np.nanmin(img)):.4f}, max={float(np.nanmax(img)):.4f}")
                 self._depth_frame = img.copy()
         except Exception as e:
             self._node.get_logger().warn(f"Depth conversion error: {e}")
@@ -195,7 +213,16 @@ class ImageCaptureNode:
             log.error(f"[Capture #{idx}] RGB   FAILED  (imwrite={ok_rgb}, exists={os.path.isfile(rgb_path)}, "
                       f"dir_writable={os.access(os.path.dirname(rgb_path), os.W_OK)})")
 
-        # ── Depth: always save as uint16 PNG, unit = mm ──────────────────────
+        # ── Depth: always save as single-channel uint16 PNG, unit = mm ──────
+        # 防御：上游若漏掉单通道约束，这里再 squeeze 一次（理论上已被 _depth_callback 拦截）
+        if depth.ndim == 3:
+            if depth.shape[2] == 1:
+                depth = depth[:, :, 0]
+            else:
+                log.warn(f"[Capture #{idx}] depth still has {depth.shape[2]} channels after callback "
+                         f"sanitization; saving channel 0 only.")
+                depth = depth[:, :, 0]
+
         if depth.dtype == np.float32:
             # 32FC1: values in metres → convert to mm
             depth_mm = (np.nan_to_num(depth, nan=0.0, posinf=0.0, neginf=0.0) * 1000.0)
@@ -203,12 +230,11 @@ class ImageCaptureNode:
             # 16UC1: values already in mm (ZED SDK convention)
             depth_mm = depth.astype(np.float32)
         else:
+            log.warn(f"[Capture #{idx}] unexpected depth dtype={depth.dtype}; "
+                     f"casting to float32 without unit conversion (verify result).")
             depth_mm = depth.astype(np.float32)
 
         depth_uint16 = depth_mm.clip(0, 65535).astype(np.uint16)
-        # cv2.imwrite refuses 3-channel uint16; squeeze any singleton channel dim
-        if depth_uint16.ndim == 3 and depth_uint16.shape[2] == 1:
-            depth_uint16 = depth_uint16[:, :, 0]
         log.info(f"[Capture #{idx}] depth_uint16 shape={depth_uint16.shape} dtype={depth_uint16.dtype} "
                  f"min={int(depth_uint16.min())} max={int(depth_uint16.max())}")
 
