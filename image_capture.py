@@ -4,6 +4,7 @@ ROS2 image capture node: displays RGB and depth images, saves on key '1'.
 """
 
 import argparse
+import json
 import os
 import sys
 import threading
@@ -20,6 +21,8 @@ def parse_args():
                         help="RGB image topic name")
     parser.add_argument("--depth-topic", default="/zed/zed_node/depth/depth_registered",
                         help="Depth image topic name")
+    parser.add_argument("--camera-info-topic", default="/zed/zed_node/left/color/rect/camera_info",
+                        help="CameraInfo topic name")
     parser.add_argument("--output-dir", default="./captured_images",
                         help="Directory to save captured images")
     parser.add_argument("--depth-scale", type=float, default=1000.0,
@@ -38,7 +41,7 @@ class ImageCaptureNode:
         import rclpy
         from rclpy.node import Node
         from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
-        from sensor_msgs.msg import Image
+        from sensor_msgs.msg import Image, CameraInfo
         try:
             from cv_bridge import CvBridge
             self._bridge = CvBridge()
@@ -48,6 +51,7 @@ class ImageCaptureNode:
         self._args = args
         self._rgb_frame = None
         self._depth_frame = None
+        self._camera_info = None
         self._lock = threading.Lock()
         self._capture_requested = False
         self._capture_count = 0
@@ -56,12 +60,15 @@ class ImageCaptureNode:
         args.output_dir = os.path.abspath(args.output_dir)
         rgb_dir = os.path.join(args.output_dir, "rgb")
         depth_dir = os.path.join(args.output_dir, "depth")
+        camera_info_dir = os.path.join(args.output_dir, "camera_info")
         os.makedirs(rgb_dir, exist_ok=True)
         os.makedirs(depth_dir, exist_ok=True)
+        os.makedirs(camera_info_dir, exist_ok=True)
         print(f"[DEBUG] cwd            = {os.getcwd()}")
         print(f"[DEBUG] output_dir abs = {args.output_dir}")
         print(f"[DEBUG] rgb_dir   abs  = {rgb_dir}  exists={os.path.isdir(rgb_dir)}  writable={os.access(rgb_dir, os.W_OK)}")
         print(f"[DEBUG] depth_dir abs  = {depth_dir}  exists={os.path.isdir(depth_dir)}  writable={os.access(depth_dir, os.W_OK)}")
+        print(f"[DEBUG] camera_info_dir abs = {camera_info_dir}  exists={os.path.isdir(camera_info_dir)}  writable={os.access(camera_info_dir, os.W_OK)}")
 
         reliability = (ReliabilityPolicy.BEST_EFFORT
                        if args.qos_reliability == "best_effort"
@@ -77,9 +84,11 @@ class ImageCaptureNode:
         self._node = Node("image_capture_node")
         self._node.create_subscription(Image, args.rgb_topic, self._rgb_callback, qos)
         self._node.create_subscription(Image, args.depth_topic, self._depth_callback, qos)
+        self._node.create_subscription(CameraInfo, args.camera_info_topic, self._camera_info_callback, qos)
 
         self._node.get_logger().info(f"Subscribing RGB:   {args.rgb_topic}")
         self._node.get_logger().info(f"Subscribing Depth: {args.depth_topic}")
+        self._node.get_logger().info(f"Subscribing CameraInfo: {args.camera_info_topic}")
         self._node.get_logger().info(f"Save directory:    {args.output_dir}")
         self._node.get_logger().info("Press '1' in the display window to capture images. Press 'q' or ESC to quit.")
 
@@ -130,6 +139,16 @@ class ImageCaptureNode:
         except Exception as e:
             self._node.get_logger().warn(f"Depth conversion error: {e}")
 
+    def _camera_info_callback(self, msg):
+        """Store the latest CameraInfo message."""
+        with self._lock:
+            self._camera_info = msg
+
+    def _camera_info_callback(self, msg):
+        """Store the latest CameraInfo message."""
+        with self._lock:
+            self._camera_info = msg
+
     def _depth_to_colormap(self, depth_img):
         """Convert raw depth image to a visible colormap."""
         if depth_img.dtype == np.float32:
@@ -147,14 +166,17 @@ class ImageCaptureNode:
             depth_uint8 = depth_uint8[:, :, 0]
         return cv2.applyColorMap(depth_uint8, cv2.COLORMAP_MAGMA)
 
-    def _save_images(self, rgb, depth):
+    def _save_images(self, rgb, depth, camera_info):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         self._capture_count += 1
         idx = self._capture_count
-        filename = f"{idx:04d}_{ts}.png"
+        filename_base = f"{idx:04d}_{ts}"
+        filename_img = f"{filename_base}.png"
+        filename_json = f"{filename_base}.json"
 
-        rgb_path   = os.path.join(self._args.output_dir, "rgb",   filename)
-        depth_path = os.path.join(self._args.output_dir, "depth", filename)
+        rgb_path   = os.path.join(self._args.output_dir, "rgb",   filename_img)
+        depth_path = os.path.join(self._args.output_dir, "depth", filename_img)
+        camera_info_path = os.path.join(self._args.output_dir, "camera_info", filename_json)
 
         log = self._node.get_logger()
         log.info(f"[Capture #{idx}] rgb   shape={rgb.shape} dtype={rgb.dtype}  -> {rgb_path}")
@@ -202,6 +224,46 @@ class ImageCaptureNode:
             log.error(f"[Capture #{idx}] Depth FAILED  (imwrite={ok_depth}, exists={os.path.isfile(depth_path)}, "
                       f"dir_writable={os.access(os.path.dirname(depth_path), os.W_OK)})")
 
+        # ── CameraInfo: save as JSON ──────────────────────────────────────────
+        if camera_info is not None:
+            camera_info_dict = {
+                "header": {
+                    "stamp": {
+                        "sec": camera_info.header.stamp.sec,
+                        "nanosec": camera_info.header.stamp.nanosec,
+                    },
+                    "frame_id": camera_info.header.frame_id,
+                },
+                "height": camera_info.height,
+                "width": camera_info.width,
+                "distortion_model": camera_info.distortion_model,
+                "d": list(camera_info.d),
+                "k": list(camera_info.k),
+                "r": list(camera_info.r),
+                "p": list(camera_info.p),
+                "binning_x": camera_info.binning_x,
+                "binning_y": camera_info.binning_y,
+                "roi": {
+                    "x_offset": camera_info.roi.x_offset,
+                    "y_offset": camera_info.roi.y_offset,
+                    "height": camera_info.roi.height,
+                    "width": camera_info.roi.width,
+                    "do_rectify": camera_info.roi.do_rectify,
+                }
+            }
+            try:
+                with open(camera_info_path, 'w') as f:
+                    json.dump(camera_info_dict, f, indent=2)
+                if os.path.isfile(camera_info_path):
+                    sz = os.path.getsize(camera_info_path)
+                    log.info(f"[Capture #{idx}] CameraInfo ok  ({sz} bytes)")
+                else:
+                    log.error(f"[Capture #{idx}] CameraInfo FAILED (file does not exist after write)")
+            except Exception as e:
+                log.error(f"[Capture #{idx}] CameraInfo save error: {e}")
+        else:
+            log.warn(f"[Capture #{idx}] CameraInfo not available, skipping JSON save")
+
     def _spin_thread(self):
         import rclpy
         rclpy.spin(self._node)
@@ -221,10 +283,11 @@ class ImageCaptureNode:
                 with self._lock:
                     rgb = self._rgb_frame.copy() if self._rgb_frame is not None else None
                     depth = self._depth_frame.copy() if self._depth_frame is not None else None
+                    camera_info = self._camera_info
 
                 if rgb is not None:
                     rgb_display = cv2.resize(rgb, (w, h))
-                    status = f"Depth: {'OK' if depth is not None else 'waiting...'}"
+                    status = f"Depth: {'OK' if depth is not None else 'waiting...'}  CameraInfo: {'OK' if camera_info is not None else 'waiting...'}"
                     cv2.putText(rgb_display, "Press '1' to capture  " + status, (10, 30),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     cv2.imshow("RGB", rgb_display)
@@ -242,14 +305,16 @@ class ImageCaptureNode:
                     break
 
                 if key == ord('1'):
-                    if rgb is not None and depth is not None:
-                        self._save_images(rgb, depth)
+                    if rgb is not None and depth is not None and camera_info is not None:
+                        self._save_images(rgb, depth, camera_info)
                     else:
                         missing = []
                         if rgb is None:
                             missing.append("RGB")
                         if depth is None:
                             missing.append("Depth")
+                        if camera_info is None:
+                            missing.append("CameraInfo")
                         print(f"Cannot capture: waiting for {', '.join(missing)} topic(s)")
 
                 elif key in (ord('q'), 27):  # 'q' or ESC

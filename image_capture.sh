@@ -8,6 +8,7 @@ set -e
 # ─── Configurable defaults ────────────────────────────────────────────────────
 RGB_TOPIC="/zed/zed_node/left/color/rect/image"
 DEPTH_TOPIC="/zed/zed_node/depth/depth_registered"
+CAMERA_INFO_TOPIC="/zed/zed_node/left/color/rect/camera_info"
 OUTPUT_DIR="./captured_images"
 DEPTH_SCALE="1000.0"          # depth raw unit → meters divisor (1000 = mm→m)
 WINDOW_WIDTH="640"
@@ -43,17 +44,18 @@ if [[ "${1}" == "--help" || "${1}" == "-h" ]]; then
 Usage: $(basename "$0") [options]
 
 Options (override defaults):
-  --rgb-topic        RGB image topic     (default: ${RGB_TOPIC})
-  --depth-topic      Depth image topic   (default: ${DEPTH_TOPIC})
-  --output-dir       Save directory      (default: ${OUTPUT_DIR})
-  --depth-scale      Depth scale factor  (default: ${DEPTH_SCALE})
-  --window-width     Window width px     (default: ${WINDOW_WIDTH})
-  --window-height    Window height px    (default: ${WINDOW_HEIGHT})
-  --qos-reliability  reliable|best_effort (default: ${QOS_RELIABILITY})
-  -h, --help         Show this help
+  --rgb-topic          RGB image topic       (default: ${RGB_TOPIC})
+  --depth-topic        Depth image topic     (default: ${DEPTH_TOPIC})
+  --camera-info-topic  CameraInfo topic      (default: ${CAMERA_INFO_TOPIC})
+  --output-dir         Save directory        (default: ${OUTPUT_DIR})
+  --depth-scale        Depth scale factor    (default: ${DEPTH_SCALE})
+  --window-width       Window width px       (default: ${WINDOW_WIDTH})
+  --window-height      Window height px      (default: ${WINDOW_HEIGHT})
+  --qos-reliability    reliable|best_effort  (default: ${QOS_RELIABILITY})
+  -h, --help           Show this help
 
 Keyboard shortcuts in viewer:
-  1      Capture current RGB + Depth frame to OUTPUT_DIR
+  1      Capture current RGB + Depth + CameraInfo to OUTPUT_DIR
   q/ESC  Quit
 
 Test with a ROS bag:
@@ -98,17 +100,19 @@ EXTRA_ARGS=("$@")
 
 # ─── Launch ───────────────────────────────────────────────────────────────────
 echo "[INFO] Starting image capture viewer..."
-echo "       RGB topic  : ${RGB_TOPIC}"
-echo "       Depth topic: ${DEPTH_TOPIC}"
-echo "       Output dir : ${OUTPUT_DIR}"
+echo "       RGB topic       : ${RGB_TOPIC}"
+echo "       Depth topic     : ${DEPTH_TOPIC}"
+echo "       CameraInfo topic: ${CAMERA_INFO_TOPIC}"
+echo "       Output dir      : ${OUTPUT_DIR}"
 echo ""
 
 exec python3 "${PYTHON_SCRIPT}" \
-  --rgb-topic      "${RGB_TOPIC}" \
-  --depth-topic    "${DEPTH_TOPIC}" \
-  --output-dir     "${OUTPUT_DIR}" \
-  --depth-scale    "${DEPTH_SCALE}" \
-  --window-width   "${WINDOW_WIDTH}" \
-  --window-height  "${WINDOW_HEIGHT}" \
-  --qos-reliability "${QOS_RELIABILITY}" \
+  --rgb-topic         "${RGB_TOPIC}" \
+  --depth-topic       "${DEPTH_TOPIC}" \
+  --camera-info-topic "${CAMERA_INFO_TOPIC}" \
+  --output-dir        "${OUTPUT_DIR}" \
+  --depth-scale       "${DEPTH_SCALE}" \
+  --window-width      "${WINDOW_WIDTH}" \
+  --window-height     "${WINDOW_HEIGHT}" \
+  --qos-reliability   "${QOS_RELIABILITY}" \
   "${EXTRA_ARGS[@]}"
