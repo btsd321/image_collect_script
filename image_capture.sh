@@ -15,9 +15,21 @@ WINDOW_HEIGHT="360"
 QOS_RELIABILITY="best_effort" # "reliable" or "best_effort"
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# Cross-shell compatible script directory detection
+if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
+  # Running in bash
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+elif [[ -n "${ZSH_VERSION:-}" ]]; then
+  # Running in zsh
+  SCRIPT_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
+else
+  # Fallback for other shells
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+fi
+
 PYTHON_SCRIPT="${SCRIPT_DIR}/image_capture.py"
 VENV_DIR="${SCRIPT_DIR}/.venv"
+
 # Auto-detect ROS2 distro and shell-appropriate setup file
 ROS2_SETUP=""
 CURRENT_SHELL="$(basename "${SHELL:-/bin/bash}")"
