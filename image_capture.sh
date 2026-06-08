@@ -17,15 +17,18 @@ QOS_RELIABILITY="best_effort" # "reliable" or "best_effort"
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 # Cross-shell compatible script directory detection
-if [[ -n "${BASH_SOURCE[0]:-}" ]]; then
-  # Running in bash
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-elif [[ -n "${ZSH_VERSION:-}" ]]; then
-  # Running in zsh
+if [[ -n "${ZSH_VERSION:-}" ]]; then
+  # Running in zsh - use zsh-specific syntax
   SCRIPT_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
 else
-  # Fallback for other shells
-  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  # Running in bash or POSIX-compatible shell
+  # Resolve symlinks and get absolute path
+  SCRIPT_PATH="${BASH_SOURCE[0]:-$0}"
+  if [[ -L "${SCRIPT_PATH}" ]]; then
+    # If it's a symlink, resolve it
+    SCRIPT_PATH="$(readlink -f "${SCRIPT_PATH}" 2>/dev/null || realpath "${SCRIPT_PATH}" 2>/dev/null || echo "${SCRIPT_PATH}")"
+  fi
+  SCRIPT_DIR="$(cd "$(dirname "${SCRIPT_PATH}")" && pwd)"
 fi
 
 PYTHON_SCRIPT="${SCRIPT_DIR}/image_capture.py"
