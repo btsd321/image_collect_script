@@ -162,11 +162,6 @@ class ImageCaptureNode:
         with self._lock:
             self._camera_info = msg
 
-    def _camera_info_callback(self, msg):
-        """Store the latest CameraInfo message."""
-        with self._lock:
-            self._camera_info = msg
-
     def _depth_to_colormap(self, depth_img):
         """Convert raw depth image to a visible colormap."""
         if depth_img.dtype == np.float32:
