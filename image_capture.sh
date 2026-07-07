@@ -106,8 +106,14 @@ echo "[INFO] Activating venv: ${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
 
 # Inject ROS2 Python packages into PYTHONPATH so the venv Python can find rclpy/cv_bridge
+# CRITICAL: Put venv site-packages FIRST to ensure numpy 1.26.4 wins over system numpy 2.x
 ROS2_PYTHON_PATH="/opt/ros/humble/local/lib/python3.10/dist-packages:/opt/ros/humble/lib/python3.10/site-packages"
-export PYTHONPATH="${ROS2_PYTHON_PATH}:${PYTHONPATH:-}"
+VENV_SITE_PACKAGES="${VENV_DIR}/lib/python3.10/site-packages"
+export PYTHONPATH="${VENV_SITE_PACKAGES}:${ROS2_PYTHON_PATH}:${PYTHONPATH:-}"
+
+# Disable user site-packages (~/.local) to prevent numpy 2.x from being loaded
+# This ensures the venv's numpy 1.26.4 is used instead of any user-installed numpy
+export PYTHONNOUSERSITE=1
 
 # ─── Parse any extra CLI overrides passed to this script ──────────────────────
 # Forward unrecognized args directly to Python (allows --rgb-topic etc. at call site)
