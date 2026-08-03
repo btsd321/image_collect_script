@@ -30,10 +30,10 @@ def compute_image_hash(image: np.ndarray, hash_size: int = 16) -> np.ndarray:
 
     Args:
         image: 输入图像（BGR 或灰度）
-        hash_size: 哈希尺寸（默认 16x16）
+        hash_size: 缩放尺寸（默认 16x16，DCT 后取左上 8x8 低频）
 
     Returns:
-        二值哈希数组（flatten，256 位）
+        二值哈希数组（flatten，64 位）
     """
     # 转换为灰度
     if len(image.shape) == 3:
@@ -335,7 +335,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例:
-  # 仅收集 RGB（默认）
+  # 默认：仅收集 RGB + 去重
   python image_capture_collector.py \\
       --input ./captured_images \\
       --output ./training_data
@@ -346,12 +346,17 @@ def main():
       --output ./training_data \\
       --full
 
-  # 启用去重
+  # 调整去重严格度（阈值越大去得越狠）
   python image_capture_collector.py \\
       --input ./captured_images \\
       --output ./training_data \\
-      --deduplicate \\
-      --hamming-threshold 0.05
+      --hamming-threshold 0.1
+
+  # 关闭去重，保留所有样本
+  python image_capture_collector.py \\
+      --input ./captured_images \\
+      --output ./training_data \\
+      --no-deduplicate
         """
     )
 
@@ -373,9 +378,10 @@ def main():
         help="收集完整数据（RGB + Depth + CameraInfo）；默认仅收集 RGB"
     )
     parser.add_argument(
-        "--deduplicate",
-        action="store_true",
-        help="启用去重逻辑（基于 RGB 图像汉明距离）"
+        "--no-deduplicate",
+        dest="deduplicate",
+        action="store_false",
+        help="关闭去重逻辑；默认开启（基于 RGB 图像汉明距离）"
     )
     parser.add_argument(
         "--hamming-threshold",
@@ -452,11 +458,11 @@ def main():
 
     # 第二阶段：去重（如果启用）
     if args.deduplicate:
-        print(f"\n[INFO] 启用去重逻辑 (汉明距离阈值: {args.hamming_threshold})")
+        print(f"\n[INFO] 去重已开启 (汉明距离阈值: {args.hamming_threshold})")
         samples = deduplicate_samples(samples, args.hamming_threshold)
         print(f"[INFO] 去重后剩余 {len(samples)} 个样本")
     else:
-        print(f"[INFO] 跳过去重")
+        print(f"[INFO] 去重已关闭（--no-deduplicate），保留全部样本")
 
     # 第三阶段：处理并保存样本
     print(f"\n[INFO] 开始处理样本...")

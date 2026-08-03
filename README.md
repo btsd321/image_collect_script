@@ -42,19 +42,22 @@ captured_images/
 
 **使用**：
 ```bash
-# 仅收集 RGB（默认，带去重）
+# 默认：仅收集 RGB + 去重
 python3 image_capture_collector.py \
     --input ./captured_images \
-    --output ./training_data \
-    --deduplicate
+    --output ./training_data
 
 # 收集完整数据（RGB + Depth + CameraInfo）
 python3 image_capture_collector.py \
     --input ./captured_images \
     --output ./training_data \
-    --full \
-    --deduplicate \
-    --hamming-threshold 0.05
+    --full
+
+# 关闭去重，保留全部样本
+python3 image_capture_collector.py \
+    --input ./captured_images \
+    --output ./training_data \
+    --no-deduplicate
 ```
 
 **输出结构**：
@@ -69,8 +72,26 @@ training_data/
 - `--input`: 输入目录（image_capture.py 的输出）
 - `--output`: 输出目录（训练数据集）
 - `--full`: 收集完整数据（RGB + Depth + CameraInfo）；不加则仅收集 RGB
-- `--deduplicate`: 启用去重
+- `--no-deduplicate`: 关闭去重；**默认开启去重**
 - `--hamming-threshold`: 汉明距离阈值（默认 0.05，越小越严格）
+
+### 去重说明
+
+去重默认开启，用于剔除连续按键保存、或画面几乎没变化而产生的重复样本：
+
+1. 对每张 RGB 图计算感知哈希（pHash）：灰度 → 缩放 16×16 → DCT → 取左上 8×8 低频 → 按中位数二值化，得到 **64 bit** 哈希。低频 + 中位数阈值使其对亮度变化和轻微噪声不敏感，只对构图变化敏感。
+2. 按时间戳排序，逐个比较**相邻**两张的归一化汉明距离。
+3. 距离小于阈值判为重复，丢弃旧的、保留新的。
+
+阈值粒度（64 bit）：每 1 bit 差异 ≈ 0.0156。
+
+| 阈值 | 容许不同的 bit 数 | 效果 |
+|------|------------------|------|
+| 0.05（默认） | ≤ 3 | 保守，只去掉几乎完全相同的帧 |
+| 0.1 | ≤ 6 | 中等 |
+| 0.2 | ≤ 12 | 激进，构图相似即视为重复 |
+
+注意：只比较相邻帧，因此相隔较远的重复画面（例如中途拍了别处又转回来）不会被去掉。
 
 ---
 
@@ -85,21 +106,18 @@ ros2 launch zed_wrapper zed2i.launch.py
 python3 image_capture.py \
     --output-dir ./captured_images
 
-# 3. 处理采集数据（去重 + 重组织）
+# 3. 处理采集数据（去重 + 重组织，去重默认开启）
 python3 image_capture_collector.py \
     --input ./captured_images \
-    --output ./training_data \
-    --deduplicate \
-    --hamming-threshold 0.05
+    --output ./training_data
 ```
 
 ### 流程 2: 仅收集 RGB 用于训练
 ```bash
-# 默认模式，仅收集 RGB
+# 默认模式：仅收集 RGB + 去重
 python3 image_capture_collector.py \
     --input ./captured_images \
-    --output ./rgb_dataset \
-    --deduplicate
+    --output ./rgb_dataset
 ```
 
 ---
