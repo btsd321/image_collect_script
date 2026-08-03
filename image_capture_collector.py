@@ -4,12 +4,29 @@
 
 从 image_capture.py 收集的数据中提取 RGB、Depth 和相机内参，重组织为训练数据集。
 
+默认行为：仅收集 RGB，并开启去重。
+
 用法:
+    # 默认（仅 RGB + 去重）
+    python image_capture_collector.py \
+        --input ./captured_images \
+        --output ./training_dataset
+
+    # 收集完整数据（RGB + Depth + CameraInfo）
     python image_capture_collector.py \
         --input ./captured_images \
         --output ./training_dataset \
-        --deduplicate \
-        --hamming-threshold 0.05
+        --full
+
+    # 关闭去重 / 调整去重严格度
+    python image_capture_collector.py \
+        --input ./captured_images \
+        --output ./training_dataset \
+        --no-deduplicate
+    python image_capture_collector.py \
+        --input ./captured_images \
+        --output ./training_dataset \
+        --hamming-threshold 0.1
 """
 
 import argparse
