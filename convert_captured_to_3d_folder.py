@@ -17,6 +17,18 @@
     └── camera_info/  # 转换后的内参 json（与本工程 bbox3d 格式一致）
 
 要求同一个样本的 rgb / depth / camera_info 文件名完全一致。
+
+用法示例::
+
+    # 最简：输出默认到 <input>/output
+    python convert_captured_to_3d_folder.py --input /data/captured_images
+
+    # 指定输出目录 + 相机字段 + 覆盖
+    python convert_captured_to_3d_folder.py \
+        --input /data/captured_images \
+        --output /data/3d_folder \
+        --camera percipio \
+        --overwrite
 """
 
 from __future__ import annotations
