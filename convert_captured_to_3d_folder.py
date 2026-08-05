@@ -232,16 +232,18 @@ def main() -> None:
         )
     )
     parser.add_argument(
-        "input_dir",
+        "--input",
+        dest="input_dir",
         type=Path,
-        nargs="?",
+        required=True,
         help="输入 captured_images 文件夹（含 rgb/ depth/ camera_info/）",
     )
     parser.add_argument(
-        "output_dir",
+        "--output",
+        dest="output_dir",
         type=Path,
-        nargs="?",
-        help="输出 3D 文件夹",
+        default=None,
+        help="输出 3D 文件夹（默认为 <input>/output）",
     )
     parser.add_argument(
         "--camera",
@@ -256,12 +258,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not args.input_dir or not args.output_dir:
-        parser.error("请提供 input_dir 和 output_dir")
+    output_dir = args.output_dir or (args.input_dir / "output")
 
     convert(
         args.input_dir,
-        args.output_dir,
+        output_dir,
         camera=args.camera,
         overwrite=args.overwrite,
     )
