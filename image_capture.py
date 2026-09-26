@@ -320,8 +320,14 @@ class ImageCaptureNode:
 
                 key = cv2.waitKey(30) & 0xFF
 
-                # Window close button: cv2.getWindowProperty returns -1 when destroyed
-                if cv2.getWindowProperty("RGB", cv2.WND_PROP_VISIBLE) < 1:
+                # Window close button: check if window still exists
+                # Note: cv2.getWindowProperty may throw exception on some backends (WSL/QT)
+                try:
+                    if cv2.getWindowProperty("RGB", cv2.WND_PROP_VISIBLE) < 1:
+                        print("Window closed, quitting...")
+                        break
+                except cv2.error:
+                    # Window was destroyed externally
                     print("Window closed, quitting...")
                     break
 

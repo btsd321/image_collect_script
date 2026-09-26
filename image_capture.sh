@@ -13,7 +13,7 @@ OUTPUT_DIR="./captured_images"
 DEPTH_SCALE="1000.0"          # depth raw unit → meters divisor (1000 = mm→m)
 WINDOW_WIDTH="640"
 WINDOW_HEIGHT="360"
-QOS_RELIABILITY="best_effort" # "reliable" or "best_effort"
+QOS_RELIABILITY="reliable"    # "reliable" or "best_effort"
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 # Cross-shell compatible script directory detection
