@@ -75,15 +75,21 @@ Options (override defaults):
   --window-width       Window width px       (default: ${WINDOW_WIDTH})
   --window-height      Window height px      (default: ${WINDOW_HEIGHT})
   --qos-reliability    reliable|best_effort  (default: ${QOS_RELIABILITY})
+  --no-gui             Run without GUI (headless mode, auto-capture)
+  --auto-capture-interval  Auto-capture interval in seconds (default: 2.0)
+  --max-captures       Max captures in headless mode (default: 10, 0=unlimited)
   -h, --help           Show this help
 
-Keyboard shortcuts in viewer:
+Keyboard shortcuts in viewer (GUI mode):
   1      Capture current RGB + Depth + CameraInfo to OUTPUT_DIR
   q/ESC  Quit
 
 Test with a ROS bag:
   ros2 bag play ~/Project/my_ros2_tools/data/ros_bag/zed_left_bag/ --loop &
   ./$(basename "$0")
+
+Headless mode example:
+  ./$(basename "$0") --no-gui --auto-capture-interval 2 --max-captures 5
 EOF
   exit 0
 fi

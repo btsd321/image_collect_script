@@ -33,6 +33,12 @@ def parse_args():
                         help="Display window height per image")
     parser.add_argument("--qos-reliability", choices=["reliable", "best_effort"], default="best_effort",
                         help="QoS reliability for subscribers")
+    parser.add_argument("--no-gui", action="store_true",
+                        help="Run without GUI (log-only mode, auto-capture every N seconds)")
+    parser.add_argument("--auto-capture-interval", type=float, default=2.0,
+                        help="Auto-capture interval in seconds when --no-gui is enabled")
+    parser.add_argument("--max-captures", type=int, default=10,
+                        help="Max number of captures in --no-gui mode (0=unlimited)")
     return parser.parse_args()
 
 
@@ -289,9 +295,57 @@ class ImageCaptureNode:
         import rclpy
         rclpy.spin(self._node)
 
+    def _run_headless(self):
+        """Headless mode: auto-capture at intervals without GUI."""
+        import time
+        interval = self._args.auto_capture_interval
+        max_captures = self._args.max_captures
+
+        print(f"[HEADLESS MODE] Auto-capture every {interval}s, max={max_captures if max_captures > 0 else 'unlimited'}")
+        print("Press Ctrl+C to stop.")
+
+        try:
+            while True:
+                time.sleep(interval)
+
+                with self._lock:
+                    rgb = self._rgb_frame.copy() if self._rgb_frame is not None else None
+                    depth = self._depth_frame.copy() if self._depth_frame is not None else None
+                    camera_info = self._camera_info
+
+                if rgb is not None and depth is not None and camera_info is not None:
+                    self._save_images(rgb, depth, camera_info)
+                    if max_captures > 0 and self._capture_count >= max_captures:
+                        print(f"[HEADLESS] Reached max captures ({max_captures}), exiting.")
+                        break
+                else:
+                    missing = []
+                    if rgb is None:
+                        missing.append("RGB")
+                    if depth is None:
+                        missing.append("Depth")
+                    if camera_info is None:
+                        missing.append("CameraInfo")
+                    print(f"[HEADLESS] Waiting for {', '.join(missing)} topic(s)...")
+
+        except KeyboardInterrupt:
+            print("\n[HEADLESS] Interrupted, exiting...")
+        finally:
+            try:
+                import rclpy
+                if rclpy.ok():
+                    self._node.destroy_node()
+                    rclpy.shutdown()
+            except Exception as e:
+                print(f"[WARN] Error shutting down ROS2: {e}")
+
     def run(self):
         spin_thread = threading.Thread(target=self._spin_thread, daemon=True)
         spin_thread.start()
+
+        if self._args.no_gui:
+            self._run_headless()
+            return
 
         w, h = self._args.window_width, self._args.window_height
         cv2.namedWindow("RGB", cv2.WINDOW_NORMAL)
