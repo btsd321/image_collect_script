@@ -331,13 +331,11 @@ class ImageCaptureNode:
         except KeyboardInterrupt:
             print("\n[HEADLESS] Interrupted, exiting...")
         finally:
-            try:
-                import rclpy
-                if rclpy.ok():
-                    self._node.destroy_node()
-                    rclpy.shutdown()
-            except Exception as e:
-                print(f"[WARN] Error shutting down ROS2: {e}")
+            import rclpy
+            import os
+            import signal
+            # Force clean exit without calling rclpy.shutdown() to avoid segfault in WSL
+            os._exit(0)
 
     def run(self):
         spin_thread = threading.Thread(target=self._spin_thread, daemon=True)
