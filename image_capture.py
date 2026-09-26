@@ -345,10 +345,19 @@ class ImageCaptureNode:
         except KeyboardInterrupt:
             print("\nInterrupted, quitting...")
         finally:
-            cv2.destroyAllWindows()
-            self._node.destroy_node()
-            import rclpy
-            rclpy.shutdown()
+            # Clean up in correct order to avoid crashes
+            try:
+                cv2.destroyAllWindows()
+            except Exception as e:
+                print(f"[WARN] Error destroying windows: {e}")
+
+            try:
+                import rclpy
+                if rclpy.ok():
+                    self._node.destroy_node()
+                    rclpy.shutdown()
+            except Exception as e:
+                print(f"[WARN] Error shutting down ROS2: {e}")
 
 
 def main():
