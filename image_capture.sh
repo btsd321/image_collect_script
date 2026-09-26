@@ -6,9 +6,9 @@
 set -e
 
 # ─── Configurable defaults ────────────────────────────────────────────────────
-RGB_TOPIC="/zed/zed_node/left/color/rect/image"
-DEPTH_TOPIC="/zed/zed_node/depth/depth_registered"
-CAMERA_INFO_TOPIC="/zed/zed_node/left/color/rect/camera_info"
+RGB_TOPIC="/camera_1/color/image_raw"
+DEPTH_TOPIC="/camera_1/depth/image_raw"
+CAMERA_INFO_TOPIC="/camera_1/color/camera_info"
 OUTPUT_DIR="./captured_images"
 DEPTH_SCALE="1000.0"          # depth raw unit → meters divisor (1000 = mm→m)
 WINDOW_WIDTH="640"
@@ -36,11 +36,19 @@ VENV_DIR="${SCRIPT_DIR}/.venv"
 
 # Auto-detect ROS2 distro and shell-appropriate setup file
 ROS2_SETUP=""
-CURRENT_SHELL="$(basename "${SHELL:-/bin/bash}")"
-if [[ "${CURRENT_SHELL}" == "zsh" ]]; then
+# Detect the actual running shell (not the login shell)
+if [[ -n "${BASH_VERSION:-}" ]]; then
+  SETUP_FILE="setup.bash"
+elif [[ -n "${ZSH_VERSION:-}" ]]; then
   SETUP_FILE="setup.zsh"
 else
-  SETUP_FILE="setup.bash"
+  # Fallback: detect from shebang or login shell
+  CURRENT_SHELL="$(basename "${SHELL:-/bin/bash}")"
+  if [[ "${CURRENT_SHELL}" == "zsh" ]]; then
+    SETUP_FILE="setup.zsh"
+  else
+    SETUP_FILE="setup.bash"
+  fi
 fi
 for distro in rolling jazzy iron humble galactic foxy; do
   if [[ -f "/opt/ros/${distro}/${SETUP_FILE}" ]]; then
